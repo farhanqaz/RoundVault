@@ -83,11 +83,34 @@ entry fun join_vault_rep_entry(
     on_join(registry, sender);
 }
 
+/// Join + stake; when vault fills, auto-activate and pay round 1 contribution.
+entry fun join_and_contribute_rep_entry(
+    vault: &mut Vault,
+    stake: Coin<SUI>,
+    payment: Coin<SUI>,
+    registry: &mut ReputationRegistry,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    let sender = ctx.sender();
+    let status_before = vault::vault_status(vault);
+    vault::join_vault_with_clock(vault, stake, clock, ctx);
+    on_join(registry, sender);
+
+    if (status_before == 0 && vault::vault_status(vault) == 1) {
+        let amount = coin::value(&payment);
+        vault::contribute(vault, payment, ctx);
+        on_contribute(registry, sender, amount);
+    } else {
+        transfer::public_transfer(payment, sender);
+    };
+}
+
 entry fun contribute_rep_entry(
     vault: &mut Vault,
     payment: Coin<SUI>,
-    random: &Random,
-    clock: &Clock,
+    _random: &Random,
+    _clock: &Clock,
     registry: &mut ReputationRegistry,
     ctx: &mut TxContext,
 ) {
@@ -95,10 +118,6 @@ entry fun contribute_rep_entry(
     let amount = coin::value(&payment);
     vault::contribute(vault, payment, ctx);
     on_contribute(registry, sender, amount);
-
-    if (vault::round_all_contributed(vault)) {
-        apply_settlement(vault, random, clock, registry, ctx);
-    };
 }
 
 entry fun settle_round_rep_entry(

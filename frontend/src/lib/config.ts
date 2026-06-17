@@ -1,7 +1,11 @@
-/** Set NEXT_PUBLIC_PACKAGE_ID after `sui client publish` */
+/** Original package ID — used for events and object types */
 export const PACKAGE_ID =
   process.env.NEXT_PUBLIC_PACKAGE_ID ??
   '0x0000000000000000000000000000000000000000000000000000000000000000';
+
+/** Latest published package ID — use for moveCall targets after upgrade */
+export const PACKAGE_PUBLISHED_AT =
+  process.env.NEXT_PUBLIC_PACKAGE_PUBLISHED_AT ?? PACKAGE_ID;
 
 export const MODULE = 'vault';
 

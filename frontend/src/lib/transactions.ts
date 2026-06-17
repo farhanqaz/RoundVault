@@ -1,12 +1,18 @@
 import { Transaction } from '@mysten/sui/transactions';
-import { MODULE, PACKAGE_ID, REPUTATION_MODULE, REPUTATION_REGISTRY_ID, suiToMist } from './config';
+import {
+  MODULE,
+  PACKAGE_PUBLISHED_AT,
+  REPUTATION_MODULE,
+  REPUTATION_REGISTRY_ID,
+  suiToMist,
+} from './config';
 
 function target(fn: string) {
-  return `${PACKAGE_ID}::${MODULE}::${fn}`;
+  return `${PACKAGE_PUBLISHED_AT}::${MODULE}::${fn}`;
 }
 
 function repTarget(fn: string) {
-  return `${PACKAGE_ID}::${REPUTATION_MODULE}::${fn}`;
+  return `${PACKAGE_PUBLISHED_AT}::${REPUTATION_MODULE}::${fn}`;
 }
 
 function reputationArg(tx: Transaction) {
@@ -35,13 +41,67 @@ export function buildCreateVaultTx(params: {
   return tx;
 }
 
-export function buildJoinVaultTx(vaultId: string, stakeMist: bigint): Transaction {
+export function buildJoinVaultTx(
+  vaultId: string,
+  stakeMist: bigint,
+  contributionMist: bigint,
+  opts: {
+    walletAddress: string;
+    fillsVault: boolean;
+    adminCapId?: string | null;
+    useJoinAndContribute?: boolean;
+  },
+): Transaction {
   const tx = new Transaction();
-  const [stake] = tx.splitCoins(tx.gas, [stakeMist]);
+
+  if (opts.useJoinAndContribute) {
+    if (opts.fillsVault) {
+      const [stake, payment] = tx.splitCoins(tx.gas, [stakeMist, contributionMist]);
+      tx.moveCall({
+        target: repTarget('join_and_contribute_rep_entry'),
+        arguments: [
+          tx.object(vaultId),
+          stake,
+          payment,
+          reputationArg(tx),
+          tx.object.clock(),
+        ],
+      });
+    } else {
+      const [stake] = tx.splitCoins(tx.gas, [stakeMist]);
+      tx.moveCall({
+        target: repTarget('join_vault_rep_entry'),
+        arguments: [tx.object(vaultId), stake, reputationArg(tx)],
+      });
+    }
+    return tx;
+  }
+
+  const [stake, payment] = tx.splitCoins(tx.gas, [stakeMist, contributionMist]);
   tx.moveCall({
     target: repTarget('join_vault_rep_entry'),
     arguments: [tx.object(vaultId), stake, reputationArg(tx)],
   });
+
+  if (opts.fillsVault && opts.adminCapId) {
+    tx.moveCall({
+      target: target('activate_vault_entry'),
+      arguments: [tx.object(vaultId), tx.object(opts.adminCapId), tx.object.clock()],
+    });
+    tx.moveCall({
+      target: repTarget('contribute_rep_entry'),
+      arguments: [
+        tx.object(vaultId),
+        payment,
+        tx.object.random(),
+        tx.object.clock(),
+        reputationArg(tx),
+      ],
+    });
+  } else {
+    tx.transferObjects([payment], opts.walletAddress);
+  }
+
   return tx;
 }
 
@@ -70,7 +130,16 @@ export function buildContributeTx(vaultId: string, amountMist: bigint): Transact
   return tx;
 }
 
-export function buildSettleRoundTx(vaultId: string): Transaction {
+export function buildDistributeTx(vaultId: string): Transaction {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: repTarget('distribute_rep_entry'),
+    arguments: [tx.object(vaultId), tx.object.random(), tx.object.clock(), reputationArg(tx)],
+  });
+  return tx;
+}
+
+export function buildSettleRoundTx(vaultId: string, _defaulters: string[]): Transaction {
   const tx = new Transaction();
   tx.moveCall({
     target: repTarget('settle_round_rep_entry'),

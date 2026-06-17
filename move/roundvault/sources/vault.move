@@ -213,6 +213,23 @@ entry fun create_vault_entry(
 
 /// Join a forming vault by staking collateral.
 public fun join_vault(vault: &mut Vault, stake: Coin<SUI>, ctx: &mut TxContext) {
+    add_member(vault, stake, ctx);
+}
+
+/// Join and auto-activate when the vault becomes full (no AdminCap required).
+public fun join_vault_with_clock(
+    vault: &mut Vault,
+    stake: Coin<SUI>,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    add_member(vault, stake, ctx);
+    if (vector::length(&vault.members) == vault.max_members) {
+        start_collecting(vault, clock);
+    };
+}
+
+fun add_member(vault: &mut Vault, stake: Coin<SUI>, ctx: &mut TxContext) {
     assert!(vault.status == STATUS_FORMING, E_VAULT_NOT_FORMING);
     assert!(vector::length(&vault.members) < vault.max_members, E_VAULT_FULL);
 
@@ -246,15 +263,18 @@ entry fun join_vault_entry(vault: &mut Vault, stake: Coin<SUI>, ctx: &mut TxCont
     join_vault(vault, stake, ctx);
 }
 
+entry fun join_vault_auto_entry(
+    vault: &mut Vault,
+    stake: Coin<SUI>,
+    clock: &Clock,
+    ctx: &mut TxContext,
+) {
+    join_vault_with_clock(vault, stake, clock, ctx);
+}
+
 // ─── Activate ─────────────────────────────────────────────────────────────────
 
-/// Start the vault once all members have joined.
-public fun activate_vault(vault: &mut Vault, cap: &AdminCap, clock: &Clock, ctx: &mut TxContext) {
-    assert!(ctx.sender() == vault.admin, E_NOT_ADMIN);
-    assert!(object::id(vault) == cap.vault_id, E_NOT_ADMIN);
-    assert!(vault.status == STATUS_FORMING, E_VAULT_NOT_FORMING);
-    assert!(vector::length(&vault.members) == vault.max_members, E_VAULT_NOT_READY);
-
+fun start_collecting(vault: &mut Vault, clock: &Clock) {
     vault.status = STATUS_COLLECTING;
     vault.current_round = 0;
     vault.round_deadline_ms = clock::timestamp_ms(clock) + vault.interval_ms;
@@ -264,6 +284,16 @@ public fun activate_vault(vault: &mut Vault, cap: &AdminCap, clock: &Clock, ctx:
         member_count: vault.max_members,
         total_rounds: vault.total_rounds,
     });
+}
+
+/// Start the vault once all members have joined (admin + AdminCap).
+public fun activate_vault(vault: &mut Vault, cap: &AdminCap, clock: &Clock, ctx: &mut TxContext) {
+    assert!(ctx.sender() == vault.admin, E_NOT_ADMIN);
+    assert!(object::id(vault) == cap.vault_id, E_NOT_ADMIN);
+    assert!(vault.status == STATUS_FORMING, E_VAULT_NOT_FORMING);
+    assert!(vector::length(&vault.members) == vault.max_members, E_VAULT_NOT_READY);
+
+    start_collecting(vault, clock);
 }
 
 entry fun activate_vault_entry(

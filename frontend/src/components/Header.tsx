@@ -1,6 +1,7 @@
 'use client';
 
 import { ConnectButton, useCurrentAccount } from '@mysten/dapp-kit';
+import Image from 'next/image';
 import Link from 'next/link';
 import { ReputationBadge } from '@/components/ReputationCard';
 import { PACKAGE_ID } from '@/lib/config';
@@ -10,30 +11,37 @@ export default function Header() {
   const account = useCurrentAccount();
 
   return (
-    <header className="sticky top-0 z-50 border-b border-zinc-800 bg-zinc-950/90 backdrop-blur-md">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+    <header className="sticky top-0 z-50 border-b border-[var(--line)] bg-[rgba(2,5,13,0.78)] backdrop-blur-2xl shadow-[0_0_60px_rgba(70,255,224,0.08)]">
+      <div className="mx-auto flex max-w-[1400px] items-center justify-between px-4 py-3 sm:px-6 xl:px-10">
         <Link href="/" className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400/30 to-emerald-600/10 text-sm font-bold text-emerald-400 ring-1 ring-emerald-500/20">
-            RV
+          <span className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-2xl border border-[var(--line-strong)] bg-[var(--cyan-soft)] text-sm font-black text-[var(--cyan)] shadow-[var(--glow)]">
+            <Image
+              src="/roundvault-mark.svg"
+              alt="RoundVault"
+              width={40}
+              height={40}
+              unoptimized
+              className="h-full w-full object-cover"
+            />
           </span>
           <div className="leading-tight">
-            <span className="block font-semibold tracking-tight text-zinc-100">RoundVault</span>
-            <span className="hidden text-[10px] text-zinc-500 sm:block">Trustless rotating savings</span>
+            <span className="block font-black tracking-[-0.04em] text-[var(--ink)] text-glow">RoundVault</span>
+            <span className="hidden text-[10px] uppercase tracking-[0.2em] text-[var(--cyan)] sm:block">Surface savings signal</span>
           </div>
         </Link>
-        <nav className="hidden items-center gap-5 text-sm text-zinc-400 md:flex">
-          <Link href="/explore" className="transition-colors hover:text-zinc-100">
+        <nav className="hidden items-center gap-5 text-sm font-medium text-[var(--muted)] md:flex">
+          <Link href="/explore" className="transition hover:-translate-y-0.5 hover:text-[var(--cyan)]">
             Explore
           </Link>
-          <Link href="/leaderboard" className="transition-colors hover:text-zinc-100">
+          <Link href="/leaderboard" className="transition hover:-translate-y-0.5 hover:text-[var(--cyan)]">
             Leaderboard
           </Link>
-          <Link href="/create" className="transition-colors hover:text-zinc-100">
+          <Link href="/create" className="transition hover:-translate-y-0.5 hover:text-[var(--cyan)]">
             Create
           </Link>
           <Link
             href={account ? `/reputation/${account.address}` : '/leaderboard'}
-            className="transition-colors hover:text-zinc-100"
+            className="transition hover:-translate-y-0.5 hover:text-[var(--cyan)]"
           >
             Reputation
           </Link>
@@ -41,7 +49,7 @@ export default function Header() {
             href={explorerPackage(PACKAGE_ID)}
             target="_blank"
             rel="noopener noreferrer"
-            className="transition-colors hover:text-zinc-100"
+            className="transition hover:-translate-y-0.5 hover:text-[var(--cyan)]"
           >
             Contract
           </a>

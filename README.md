@@ -23,10 +23,9 @@ Over **$1 trillion** flows through informal rotating savings clubs every year. T
 
 | Resource | Link |
 |----------|------|
-| **Package ID** | `0x7a368a14a9fd91a364c41ad9db905a1179e808930f51889dca61d1c073cad444` (v2) |
-| **Publish tx** | [Suiscan ↗](https://suiscan.xyz/testnet/tx/Dauug2vmjMtjUXxwySAT9yCnjK5ByZAepF5m7cC7MkFQ) |
-| **Upgrade tx (v2)** | [Suiscan ↗](https://suiscan.xyz/testnet/tx/EJ5JbTtsv6i1cbk3PaDNLZKGUExuvW6zfnVZwYdBrEZs) |
-| **ReputationRegistry** | `0x75fdf641343ce8aa1d89ab3f893f8697ae64b395e10ff6c4effc9a026981fa7a` |
+| **Package ID** | `0x346ec1fa6b3c0e476c60b20e8700486e7d64084925492cd3bd06c4dbd769ce86` (v1) |
+| **Publish tx** | [Suiscan ↗](https://suiscan.xyz/testnet/tx/F5LeZHurn19ajXcyPhzRszg69Kk563y3VNMWtKirEyZo) |
+| **ReputationRegistry** | `0x35d004d3e02124f7b077d9b1781218d0510cc22253b58bd6e3c3709af13d9b5e` |
 | **Modules** | `vault`, `reputation` |
 
 ---
@@ -52,8 +51,9 @@ npm run dev                  # http://localhost:3000
 Env vars:
 
 ```
-NEXT_PUBLIC_PACKAGE_ID=0x7a368a14a9fd91a364c41ad9db905a1179e808930f51889dca61d1c073cad444
-NEXT_PUBLIC_REPUTATION_REGISTRY_ID=0x75fdf641343ce8aa1d89ab3f893f8697ae64b395e10ff6c4effc9a026981fa7a
+NEXT_PUBLIC_PACKAGE_ID=0x346ec1fa6b3c0e476c60b20e8700486e7d64084925492cd3bd06c4dbd769ce86
+NEXT_PUBLIC_PACKAGE_PUBLISHED_AT=0x346ec1fa6b3c0e476c60b20e8700486e7d64084925492cd3bd06c4dbd769ce86
+NEXT_PUBLIC_REPUTATION_REGISTRY_ID=0x35d004d3e02124f7b077d9b1781218d0510cc22253b58bd6e3c3709af13d9b5e
 ```
 
 ### Deploy frontend (Vercel)

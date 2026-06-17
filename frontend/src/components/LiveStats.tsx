@@ -21,30 +21,29 @@ export default function LiveStats() {
 
   const items = [
     {
-      label: 'Vaults on-chain',
+      label: 'Vaults',
       value: stats ? String(stats.vaultsCreated) : '…',
     },
     {
-      label: 'Total distributed',
+      label: 'Pooled',
       value: stats ? `${mistToSui(stats.totalDistributed)} SUI` : '…',
     },
     {
-      label: 'Total slashed',
+      label: 'Slashed',
       value: stats ? `${mistToSui(stats.totalSlashed)} SUI` : '…',
     },
   ];
 
   return (
-    <section className="border-y border-zinc-800 bg-zinc-900/50">
-      <div className="mx-auto grid max-w-5xl grid-cols-1 divide-y divide-zinc-800 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+    <section>
+      <div className="grid grid-cols-3 divide-x divide-[var(--line)]">
         {items.map((stat) => (
-          <div key={stat.label} className="px-4 py-8 text-center">
-            <p className="text-2xl font-bold tabular-nums text-zinc-100">{stat.value}</p>
-            <p className="mt-1 text-sm text-zinc-500">{stat.label}</p>
+          <div key={stat.label} className="px-2 py-2.5">
+            <p className="tabular text-sm font-black text-[var(--ink)] xl:text-base">{stat.value}</p>
+            <p className="mt-0.5 text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--faint)]">{stat.label}</p>
           </div>
         ))}
       </div>
-      <p className="pb-4 text-center text-xs text-zinc-600">Live from RoundVault events on Sui testnet</p>
     </section>
   );
 }

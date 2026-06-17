@@ -19,11 +19,11 @@ const { Transaction } = require('@mysten/sui/transactions');
 
 const PACKAGE_ID =
   process.env.NEXT_PUBLIC_PACKAGE_ID ??
-  '0x7a368a14a9fd91a364c41ad9db905a1179e808930f51889dca61d1c073cad444';
+  '0x346ec1fa6b3c0e476c60b20e8700486e7d64084925492cd3bd06c4dbd769ce86';
 
 const REPUTATION_REGISTRY_ID =
   process.env.NEXT_PUBLIC_REPUTATION_REGISTRY_ID ??
-  '0x75fdf641343ce8aa1d89ab3f893f8697ae64b395e10ff6c4effc9a026981fa7a';
+  '0x35d004d3e02124f7b077d9b1781218d0510cc22253b58bd6e3c3709af13d9b5e';
 
 const MODULE = 'vault';
 const REPUTATION_MODULE = 'reputation';

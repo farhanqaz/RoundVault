@@ -11,9 +11,11 @@ import CopyButton from '@/components/CopyButton';
 import PayoutSchedule from '@/components/PayoutSchedule';
 import { ReputationBadge } from '@/components/ReputationCard';
 import { mistToSui, MODULE, PACKAGE_ID, STATUS_LABELS, suiToMist } from '@/lib/config';
+import { packageHasJoinAndContribute } from '@/lib/package';
 import {
   buildActivateVaultTx,
   buildContributeTx,
+  buildDistributeTx,
   buildJoinVaultTx,
   buildSettleRoundTx,
   buildWithdrawStakeTx,
@@ -59,7 +61,9 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
   const [success, setSuccess] = useState<{ msg: string; digest?: string } | null>(null);
   const [loading, setLoading] = useState(true);
   const [optimisticPaidRound, setOptimisticPaidRound] = useState<number | null>(null);
+  const [useJoinAndContribute, setUseJoinAndContribute] = useState(false);
   const settlingRef = useRef(false);
+  const activatingRef = useRef(false);
   const lastSettleRoundRef = useRef(-1);
 
   const loadVault = useCallback(async () => {
@@ -80,6 +84,10 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
       setLoading(false);
     }
   }, [client, vaultId]);
+
+  useEffect(() => {
+    packageHasJoinAndContribute(client).then(setUseJoinAndContribute);
+  }, [client]);
 
   useEffect(() => {
     loadVault();
@@ -132,22 +140,50 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
     vault?.members?.map(parseVaultMember).filter((m): m is ParsedMember => m != null) ?? [];
 
   const unpaidStaked = parsedMembers.filter((m) => m.staked && !m.paidCurrentRound);
+  const paidCount = parsedMembers.filter((m) => m.paidCurrentRound).length;
+  const maxMembers = vault ? Number(vault.max_members) : 0;
+  const memberCount = parsedMembers.length;
+  const vaultFull = maxMembers > 0 && memberCount >= maxMembers;
+  const allPaid = vault?.status === 1 && maxMembers > 0 && paidCount >= maxMembers;
   const deadlinePassed =
     vault != null && Number(vault.round_deadline_ms) > 0 && Number(vault.round_deadline_ms) <= Date.now();
-  const shouldAutoSettleDeadline =
-    vault?.status === 1 && account != null && deadlinePassed && unpaidStaked.length > 0;
+  const shouldAutoActivate =
+    !useJoinAndContribute &&
+    vault?.status === 0 &&
+    account != null &&
+    adminCapId != null &&
+    vaultFull;
+  const shouldAutoSettleRound =
+    vault?.status === 1 && account != null && deadlinePassed;
 
   useEffect(() => {
-    if (!shouldAutoSettleDeadline || settlingRef.current || isPending) return;
+    if (!shouldAutoActivate || activatingRef.current || isPending) return;
+
+    activatingRef.current = true;
+    runTx('Activate vault', () => buildActivateVaultTx(vaultId, adminCapId!)).finally(() => {
+      activatingRef.current = false;
+    });
+  }, [shouldAutoActivate, isPending, vault, vaultId, adminCapId]);
+
+  useEffect(() => {
+    if (!shouldAutoSettleRound || settlingRef.current || isPending) return;
     if (vault && vault.current_round === lastSettleRoundRef.current) return;
 
     settlingRef.current = true;
     lastSettleRoundRef.current = vault?.current_round ?? -1;
+    const defaulters = unpaidStaked.map((m) => m.addr);
 
-    runTx('Auto-settle round', () => buildSettleRoundTx(vaultId)).finally(() => {
+    const settle =
+      defaulters.length > 0
+        ? runTx('Auto-settle round', () => buildSettleRoundTx(vaultId, defaulters))
+        : allPaid
+          ? runTx('Gacha draw', () => buildDistributeTx(vaultId))
+          : Promise.resolve(false);
+
+    settle.finally(() => {
       settlingRef.current = false;
     });
-  }, [shouldAutoSettleDeadline, isPending, vault, vaultId]);
+  }, [shouldAutoSettleRound, isPending, vault, vaultId, unpaidStaked, allPaid]);
 
   const walletAddr = account?.address;
   const myMember = walletAddr
@@ -190,9 +226,6 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
   const status = STATUS_LABELS[vault.status] ?? 'Unknown';
   const deadline = Number(vault.round_deadline_ms);
   const countdown = deadline > nowMs() ? Math.floor((deadline - nowMs()) / 1000) : 0;
-  const paidCount = parsedMembers.filter((m) => m.paidCurrentRound).length;
-  const memberCount = parsedMembers.length;
-  const maxMembers = Number(vault.max_members);
   const isMember = myMember != null;
   const hasPaidThisRound =
     (optimisticPaidRound === vault.current_round && myMember != null) ||
@@ -207,25 +240,25 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
   const imEligible = myMember?.staked && !myMember.receivedPayout && vault.status === 1;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10">
-      <Link href="/explore" className="text-xs text-zinc-500 hover:text-zinc-300">
+    <div className="mx-auto max-w-5xl px-4 py-10">
+      <Link href="/explore" className="text-xs font-black uppercase tracking-[0.18em] text-[var(--muted)] hover:text-[var(--cyan)]">
         ← All vaults
       </Link>
 
       <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold text-zinc-100">{name}</h1>
+            <h1 className="nansen-hero-title text-5xl font-black tracking-[-0.07em]">{name}</h1>
             <StatusBadge status={status} />
           </div>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span className="font-mono text-xs text-zinc-500">{shortenAddress(vaultId, 8)}</span>
+            <span className="font-mono text-xs text-[var(--faint)]">{shortenAddress(vaultId, 8)}</span>
             <CopyButton text={vaultId} label="Copy ID" />
             <a
               href={explorerObject(vaultId)}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-emerald-500/80 hover:text-emerald-400"
+              className="text-xs font-semibold text-[var(--cyan)] hover:underline"
             >
               Explorer ↗
             </a>
@@ -241,53 +274,58 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
       </div>
 
       {/* Main panel */}
-      <div className="mt-6 space-y-5 rounded-2xl border border-zinc-800 bg-zinc-900/50 p-6">
+      <div className="signal-panel mt-6 space-y-5 rounded-[2rem] p-6">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <span className="text-sm text-zinc-400">
-            Round <strong className="text-zinc-200">{vault.current_round + 1}</strong> of{' '}
+          <span className="text-sm font-semibold text-[var(--muted)]">
+            Round <strong className="tabular text-[var(--ink)]">{vault.current_round + 1}</strong> of{' '}
             {vault.total_rounds}
           </span>
           {vault.status === 1 && countdown > 0 && (
-            <span className="rounded-full bg-amber-500/10 px-3 py-1 font-mono text-xs text-amber-400">
-              ⏱ {formatCountdown(countdown)}
+            <span className="rounded-full border border-[var(--line-strong)] bg-[var(--cyan-soft)] px-3 py-1 font-mono text-xs text-[var(--cyan)] shadow-[var(--glow)]">
+              {formatCountdown(countdown)}
             </span>
           )}
-          {vault.status === 1 && countdown === 0 && deadline > 0 && (
-            <span className="rounded-full bg-red-500/10 px-3 py-1 text-xs text-red-400">
+          {vault.status === 1 && countdown === 0 && deadline > 0 && !allPaid && (
+            <span className="rounded-full border border-red-400/30 bg-red-500/10 px-3 py-1 text-xs text-red-300">
               Deadline passed — auto-settling…
+            </span>
+          )}
+          {vault.status === 1 && countdown === 0 && deadline > 0 && allPaid && (
+            <span className="rounded-full border border-[var(--line-strong)] bg-[var(--cyan-soft)] px-3 py-1 text-xs text-[var(--cyan)]">
+              Round ended — running gacha…
             </span>
           )}
         </div>
 
         <div>
           <div className="mb-2 flex justify-between text-sm">
-            <span className="text-zinc-400">Pot this round</span>
-            <span className="font-semibold tabular-nums text-emerald-400">
+            <span className="font-black uppercase tracking-[0.16em] text-[var(--faint)]">Pot this round</span>
+            <span className="tabular font-black text-[var(--cyan)] text-glow">
               {mistToSui(potBalance)} SUI
             </span>
           </div>
-          <div className="h-2.5 overflow-hidden rounded-full bg-zinc-800">
+          <div className="h-4 overflow-hidden rounded-full border border-[var(--line)] bg-[var(--panel-2)] shadow-[inset_0_0_24px_rgba(70,255,224,0.12)]">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500"
+              className="h-full rounded-full bg-[linear-gradient(90deg,var(--cyan),var(--blue),var(--green))] transition-all duration-500"
               style={{ width: `${maxMembers ? (paidCount / maxMembers) * 100 : 0}%` }}
             />
           </div>
-          <p className="mt-1.5 text-xs text-zinc-500">
+          <p className="mt-1.5 text-xs text-[var(--faint)]">
             {paidCount} of {maxMembers} members contributed
           </p>
         </div>
 
         {vault.status === 1 && (
-          <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3">
-            <p className="text-xs font-medium uppercase tracking-wide text-violet-400/90">
-              🎲 Gacha draw this round
+          <div className="rounded-2xl border border-[var(--line)] bg-[var(--cyan-soft)] px-4 py-3 shadow-[inset_0_0_24px_rgba(70,255,224,0.10)]">
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-[var(--cyan)]">
+              Gacha draw this round
             </p>
-            <p className="mt-1 text-sm text-zinc-300">
-              {eligibleCount} eligible member{eligibleCount === 1 ? '' : 's'} — gacha runs automatically
-              when everyone pays or the deadline passes
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              {eligibleCount} eligible member{eligibleCount === 1 ? '' : 's'} — gacha runs when this
+              round&apos;s deadline ends
             </p>
             {imEligible && (
-              <p className="mt-1 text-xs text-violet-300">You&apos;re in the pool — good luck!</p>
+              <p className="mt-1 text-xs text-[var(--cyan)]">You&apos;re in the pool — good luck!</p>
             )}
           </div>
         )}
@@ -306,22 +344,21 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
           currentRound={vault.current_round}
           totalRounds={vault.total_rounds}
           eligibleCount={eligibleCount}
-          members={vault.members}
         />
       </div>
 
       {/* Members */}
       {parsedMembers.length > 0 && (
-        <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-800">
-          <div className="border-b border-zinc-800 px-4 py-3 text-sm font-medium text-zinc-300">
+        <div className="signal-panel mt-6 overflow-hidden rounded-[2rem]">
+          <div className="border-b border-[var(--line)] px-4 py-3 text-sm font-black uppercase tracking-[0.16em] text-[var(--cyan)]">
             Members
           </div>
-          <ul className="divide-y divide-zinc-800">
+          <ul className="divide-y divide-[var(--line)]">
             {parsedMembers.map((m, i) => (
               <li key={i} className="flex items-center justify-between gap-2 px-4 py-3 text-sm">
-                <span className="truncate font-mono text-xs text-zinc-400">
+                <span className="truncate font-mono text-xs text-[var(--muted)]">
                   {addressesEqual(m.addr, walletAddr) ? (
-                    <span className="text-zinc-200">{shortenAddress(m.addr)} (you)</span>
+                    <span className="text-[var(--ink)]">{shortenAddress(m.addr)} (you)</span>
                   ) : (
                     shortenAddress(m.addr, 8)
                   )}
@@ -344,7 +381,7 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
       {/* Actions */}
       <div className="mt-8 space-y-4">
         {!account && (
-          <p className="rounded-xl border border-zinc-700 bg-zinc-900 px-4 py-3 text-center text-sm text-zinc-400">
+          <p className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] px-4 py-3 text-center text-sm text-[var(--muted)]">
             Connect wallet (Sui Testnet) to interact
           </p>
         )}
@@ -353,28 +390,45 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
           <div className="flex flex-wrap gap-3">
             {!isMember && (
               <button
-                onClick={() =>
-                  runTx('Join', () =>
-                    buildJoinVaultTx(vaultId, suiToMist(mistToSui(vault.stake_amount))),
-                  )
-                }
+                onClick={() => {
+                  if (!account) return;
+                  const stakeMist = suiToMist(mistToSui(vault.stake_amount));
+                  const contributionMist = suiToMist(mistToSui(vault.contribution));
+                  const fillsVault = memberCount + 1 >= maxMembers;
+                  return runTx('Join', () =>
+                    buildJoinVaultTx(vaultId, stakeMist, contributionMist, {
+                      walletAddress: account.address,
+                      fillsVault,
+                      adminCapId,
+                      useJoinAndContribute,
+                    }),
+                    fillsVault && (useJoinAndContribute || adminCapId)
+                      ? { optimisticPaidRound: 0 }
+                      : undefined,
+                  );
+                }}
                 disabled={isPending || !account || memberCount >= maxMembers}
                 className="action-btn"
               >
-                Join & stake {mistToSui(vault.stake_amount)} SUI
+                {memberCount + 1 >= maxMembers ? (
+                  <>
+                    Join — stake {mistToSui(vault.stake_amount)} + round 1{' '}
+                    {mistToSui(vault.contribution)} SUI
+                  </>
+                ) : (
+                  <>Join — stake {mistToSui(vault.stake_amount)} SUI</>
+                )}
               </button>
             )}
-            {isMember && (
-              <p className="text-sm text-emerald-400">✓ You&apos;re in — waiting for {maxMembers - memberCount} more</p>
+            {isMember && !vaultFull && (
+              <p className="text-sm font-semibold text-[var(--cyan)]">
+                ✓ You&apos;re in — contribute round 1 after vault fills
+              </p>
             )}
-            {adminCapId && memberCount >= maxMembers && (
-              <button
-                onClick={() => runTx('Activate', () => buildActivateVaultTx(vaultId, adminCapId))}
-                disabled={isPending}
-                className="action-btn"
-              >
-                Activate vault
-              </button>
+            {vaultFull && vault.status === 0 && (
+              <p className="text-sm font-semibold text-[var(--cyan)]">
+                All members joined — starting first round…
+              </p>
             )}
           </div>
         )}
@@ -397,11 +451,16 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
               </button>
             )}
             {isMember && hasPaidThisRound && (
-              <p className="self-center text-sm text-emerald-400">✓ You paid this round</p>
+              <p className="self-center text-sm font-semibold text-[var(--cyan)]">You paid this round</p>
             )}
-            {paidCount >= maxMembers && vault.status === 1 && (
-              <p className="self-center text-sm text-violet-300">
-                All paid — gacha draw runs automatically
+            {isMember && !hasPaidThisRound && vault.status === 1 && (
+              <p className="self-center text-xs text-[var(--faint)]">
+                Round {vault.current_round + 1} payment — stake on join is separate
+              </p>
+            )}
+            {paidCount >= maxMembers && vault.status === 1 && countdown > 0 && (
+              <p className="self-center text-sm font-semibold text-[var(--cyan)]">
+                All paid — gacha when round ends ({formatCountdown(countdown)})
               </p>
             )}
           </div>
@@ -409,7 +468,7 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
 
         {vault.status === 2 && (
           <div className="flex flex-wrap gap-3">
-            <p className="w-full rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-center text-sm text-emerald-400">
+            <p className="w-full rounded-2xl border border-[var(--line-strong)] bg-[var(--cyan-soft)] px-4 py-3 text-center text-sm font-semibold text-[var(--cyan)]">
               Vault completed all rounds
             </p>
             {isMember && myMember?.staked && !myMember.stakeWithdrawn && (
@@ -455,23 +514,23 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
 
 function MiniStat({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="rounded-xl border border-zinc-800 bg-zinc-900/40 px-4 py-3">
-      <p className="text-xs text-zinc-500">{label}</p>
-      <p className="mt-0.5 font-semibold tabular-nums text-zinc-100">{value}</p>
-      <p className="text-[10px] text-zinc-600">{sub}</p>
+    <div className="rounded-2xl border border-[var(--line)] bg-[var(--panel)] px-4 py-3 shadow-[inset_0_0_20px_rgba(70,255,224,0.07)]">
+      <p className="text-xs font-black uppercase tracking-[0.14em] text-[var(--faint)]">{label}</p>
+      <p className="tabular mt-1 font-black text-[var(--ink)]">{value}</p>
+      <p className="text-[10px] text-[var(--faint)]">{sub}</p>
     </div>
   );
 }
 
 function StatusBadge({ status }: { status: string }) {
   const colors: Record<string, string> = {
-    Forming: 'bg-blue-500/20 text-blue-400 ring-blue-500/30',
-    Collecting: 'bg-amber-500/20 text-amber-400 ring-amber-500/30',
-    Completed: 'bg-emerald-500/20 text-emerald-400 ring-emerald-500/30',
+    Forming: 'border-[var(--line-strong)] bg-[var(--cyan-soft)] text-[var(--cyan)]',
+    Collecting: 'border-[var(--line-strong)] bg-[var(--cyan-soft)] text-[var(--cyan)]',
+    Completed: 'border-green-400/30 bg-green-400/10 text-green-300',
   };
   return (
     <span
-      className={`rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${colors[status] ?? 'bg-zinc-800 text-zinc-400 ring-zinc-700'}`}
+      className={`rounded-full border px-2.5 py-1 text-xs font-black uppercase tracking-[0.14em] shadow-[var(--glow)] ${colors[status] ?? 'border-[var(--line)] bg-[var(--panel)] text-[var(--muted)]'}`}
     >
       {status}
     </span>
@@ -480,11 +539,11 @@ function StatusBadge({ status }: { status: string }) {
 
 function Tag({ children, color }: { children: React.ReactNode; color: 'emerald' | 'blue' | 'red' }) {
   const c = {
-    emerald: 'bg-emerald-500/15 text-emerald-400',
-    blue: 'bg-blue-500/15 text-blue-400',
-    red: 'bg-red-500/15 text-red-400',
+    emerald: 'border border-[var(--line-strong)] bg-[var(--cyan-soft)] text-[var(--cyan)]',
+    blue: 'border border-blue-400/30 bg-blue-400/10 text-blue-300',
+    red: 'border border-red-400/30 bg-red-400/10 text-red-300',
   };
-  return <span className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${c[color]}`}>{children}</span>;
+  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.1em] ${c[color]}`}>{children}</span>;
 }
 
 function formatCountdown(secs: number): string {

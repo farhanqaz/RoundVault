@@ -10,12 +10,19 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'http://localhost:3000'),
   title: 'RoundVault — Trustless Rotating Savings on Sui',
   description:
     'RoundVault brings rotating savings clubs on-chain. Stake collateral, contribute each round, receive the pot — enforced by smart contract.',
+  icons: {
+    icon: '/roundvault-mark.svg',
+    shortcut: '/roundvault-mark.svg',
+    apple: '/roundvault-mark.svg',
+  },
   openGraph: {
     title: 'RoundVault',
     description: 'No custodian holds the pot. Defaults get slashed.',
+    images: ['/roundvault-logo.svg'],
   },
 };
 
