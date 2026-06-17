@@ -76,7 +76,7 @@ Trustless rotating savings (ROSCA) on Sui — stake bonds, round contributions, 
 | Demo video recorded | High |
 | Vercel / public deploy URL | High |
 | End-to-end test on new package | ✅ (`npm run test:e2e` + `test:e2e:write`) |
-| GitHub public + Devfolio link | Medium |
+| GitHub public + Devfolio link | ✅ [github.com/farhanqaz/RoundVault](https://github.com/farhanqaz/RoundVault) |
 
 ---
 
