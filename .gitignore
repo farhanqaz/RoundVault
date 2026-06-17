@@ -18,3 +18,12 @@ move/**/build/
 # OS
 .DS_Store
 wget-log
+
+# Personal / internal docs (local only)
+CHECKPOINT.md
+DEMO.md
+SUBMISSION.md
+frontend/AGENTS.md
+frontend/CLAUDE.md
+move/roundvault/Published.toml.bak
+move/roundvault/Published.toml.*.bak

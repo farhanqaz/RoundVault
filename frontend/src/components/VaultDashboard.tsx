@@ -18,7 +18,16 @@ import {
   buildSettleRoundTx,
   buildWithdrawStakeTx,
 } from '@/lib/transactions';
-import { decodeVaultName, explorerObject, explorerTx, parseBalanceField, shortenAddress } from '@/lib/utils';
+import {
+  addressesEqual,
+  decodeVaultName,
+  explorerObject,
+  explorerTx,
+  parseBalanceField,
+  parseVaultMember,
+  type ParsedMember,
+  shortenAddress,
+} from '@/lib/utils';
 
 type VaultFields = {
   name: number[];
@@ -35,16 +44,7 @@ type VaultFields = {
   status: number;
   total_slashed: string;
   pot?: unknown;
-  members?: { fields: MemberFields }[];
-};
-
-type MemberFields = {
-  addr: string;
-  staked: boolean;
-  paid_current_round: boolean;
-  received_payout: boolean;
-  miss_count: number;
-  stake_withdrawn?: boolean;
+  members?: unknown[];
 };
 
 export default function VaultDashboard({ vaultId }: { vaultId: string }) {
@@ -58,6 +58,7 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ msg: string; digest?: string } | null>(null);
   const [loading, setLoading] = useState(true);
+  const [optimisticPaidRound, setOptimisticPaidRound] = useState<number | null>(null);
   const settlingRef = useRef(false);
   const lastSettleRoundRef = useRef(-1);
 
@@ -108,11 +109,16 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
   const runTx = async (
     label: string,
     build: () => ReturnType<typeof buildContributeTx>,
+    opts?: { optimisticPaidRound?: number },
   ) => {
     setError(null);
     setSuccess(null);
     try {
       const result = await signAndExecute({ transaction: build() });
+      await client.waitForTransaction({ digest: result.digest });
+      if (opts?.optimisticPaidRound != null) {
+        setOptimisticPaidRound(opts.optimisticPaidRound);
+      }
       await loadVault();
       setSuccess({ msg: `${label} successful`, digest: result.digest });
       return true;
@@ -122,8 +128,10 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
     }
   };
 
-  const unpaidStaked =
-    vault?.members?.filter((m) => m.fields.staked && !m.fields.paid_current_round) ?? [];
+  const parsedMembers: ParsedMember[] =
+    vault?.members?.map(parseVaultMember).filter((m): m is ParsedMember => m != null) ?? [];
+
+  const unpaidStaked = parsedMembers.filter((m) => m.staked && !m.paidCurrentRound);
   const deadlinePassed =
     vault != null && Number(vault.round_deadline_ms) > 0 && Number(vault.round_deadline_ms) <= Date.now();
   const shouldAutoSettleDeadline =
@@ -140,6 +148,21 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
       settlingRef.current = false;
     });
   }, [shouldAutoSettleDeadline, isPending, vault, vaultId]);
+
+  const walletAddr = account?.address;
+  const myMember = walletAddr
+    ? parsedMembers.find((m) => addressesEqual(m.addr, walletAddr))
+    : undefined;
+
+  useEffect(() => {
+    if (myMember?.paidCurrentRound && optimisticPaidRound === vault?.current_round) {
+      setOptimisticPaidRound(null);
+    }
+  }, [myMember?.paidCurrentRound, optimisticPaidRound, vault?.current_round]);
+
+  useEffect(() => {
+    if (vault != null) setOptimisticPaidRound(null);
+  }, [vault?.current_round]);
 
   if (loading && !vault) {
     return (
@@ -167,20 +190,21 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
   const status = STATUS_LABELS[vault.status] ?? 'Unknown';
   const deadline = Number(vault.round_deadline_ms);
   const countdown = deadline > nowMs() ? Math.floor((deadline - nowMs()) / 1000) : 0;
-  const paidCount = vault.members?.filter((m) => m.fields.paid_current_round).length ?? 0;
-  const memberCount = vault.members?.length ?? 0;
+  const paidCount = parsedMembers.filter((m) => m.paidCurrentRound).length;
+  const memberCount = parsedMembers.length;
   const maxMembers = Number(vault.max_members);
-  const isMember = vault.members?.some((m) => m.fields.addr === account?.address);
-  const myMember = vault.members?.find((m) => m.fields.addr === account?.address);
-  const canContribute = myMember && !myMember.fields.paid_current_round && vault.status === 1;
+  const isMember = myMember != null;
+  const hasPaidThisRound =
+    (optimisticPaidRound === vault.current_round && myMember != null) ||
+    (myMember?.paidCurrentRound ?? false);
+  const canContribute =
+    isMember && myMember.staked && !hasPaidThisRound && vault.status === 1;
   const payoutHistory =
     vault.payout_history ??
     vault.payout_order?.slice(0, vault.current_round) ??
     [];
-  const eligibleCount =
-    vault.members?.filter((m) => m.fields.staked && !m.fields.received_payout).length ?? 0;
-  const imEligible =
-    myMember?.fields.staked && !myMember.fields.received_payout && vault.status === 1;
+  const eligibleCount = parsedMembers.filter((m) => m.staked && !m.receivedPayout).length;
+  const imEligible = myMember?.staked && !myMember.receivedPayout && vault.status === 1;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10">
@@ -287,29 +311,29 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
       </div>
 
       {/* Members */}
-      {vault.members && vault.members.length > 0 && (
+      {parsedMembers.length > 0 && (
         <div className="mt-6 overflow-hidden rounded-2xl border border-zinc-800">
           <div className="border-b border-zinc-800 px-4 py-3 text-sm font-medium text-zinc-300">
             Members
           </div>
           <ul className="divide-y divide-zinc-800">
-            {vault.members.map((m, i) => (
+            {parsedMembers.map((m, i) => (
               <li key={i} className="flex items-center justify-between gap-2 px-4 py-3 text-sm">
                 <span className="truncate font-mono text-xs text-zinc-400">
-                  {m.fields.addr === account?.address ? (
-                    <span className="text-zinc-200">{shortenAddress(m.fields.addr)} (you)</span>
+                  {addressesEqual(m.addr, walletAddr) ? (
+                    <span className="text-zinc-200">{shortenAddress(m.addr)} (you)</span>
                   ) : (
-                    shortenAddress(m.fields.addr, 8)
+                    shortenAddress(m.addr, 8)
                   )}
                 </span>
                 <div className="flex shrink-0 items-center gap-1.5">
-                  <ReputationBadge address={m.fields.addr} compact />
-                  {m.fields.paid_current_round && (
+                  <ReputationBadge address={m.addr} compact />
+                  {(m.paidCurrentRound || (addressesEqual(m.addr, walletAddr) && hasPaidThisRound)) && (
                     <Tag color="emerald">Paid</Tag>
                   )}
-                  {m.fields.received_payout && <Tag color="blue">Received</Tag>}
-                  {m.fields.miss_count > 0 && <Tag color="red">{m.fields.miss_count}× miss</Tag>}
-                  {!m.fields.staked && <Tag color="red">Slashed</Tag>}
+                  {m.receivedPayout && <Tag color="blue">Received</Tag>}
+                  {m.missCount > 0 && <Tag color="red">{m.missCount}× miss</Tag>}
+                  {!m.staked && <Tag color="red">Slashed</Tag>}
                 </div>
               </li>
             ))}
@@ -360,8 +384,10 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
             {canContribute && (
               <button
                 onClick={() =>
-                  runTx('Contribute', () =>
-                    buildContributeTx(vaultId, suiToMist(mistToSui(vault.contribution))),
+                  runTx(
+                    'Contribute',
+                    () => buildContributeTx(vaultId, suiToMist(mistToSui(vault.contribution))),
+                    { optimisticPaidRound: vault.current_round },
                   )
                 }
                 disabled={isPending}
@@ -370,7 +396,7 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
                 Contribute {mistToSui(vault.contribution)} SUI
               </button>
             )}
-            {isMember && myMember?.fields.paid_current_round && (
+            {isMember && hasPaidThisRound && (
               <p className="self-center text-sm text-emerald-400">✓ You paid this round</p>
             )}
             {paidCount >= maxMembers && vault.status === 1 && (
@@ -386,7 +412,7 @@ export default function VaultDashboard({ vaultId }: { vaultId: string }) {
             <p className="w-full rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 text-center text-sm text-emerald-400">
               Vault completed all rounds
             </p>
-            {isMember && myMember?.fields.staked && !myMember.fields.stake_withdrawn && (
+            {isMember && myMember?.staked && !myMember.stakeWithdrawn && (
               <button
                 onClick={() => runTx('Withdraw stake', () => buildWithdrawStakeTx(vaultId))}
                 disabled={isPending}

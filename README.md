@@ -6,8 +6,6 @@
 
 RoundVault brings ROSCA (Rotating Savings and Credit Association) on-chain. Members stake collateral, contribute each round, and one random member wins the pot each round — enforced by smart contract, not trust.
 
-**Status:** see **[CHECKPOINT.md](./CHECKPOINT.md)** for what is shipped vs remaining hackathon tasks.
-
 ---
 
 ## Problem
@@ -103,34 +101,14 @@ frontend/           Next.js + @mysten/dapp-kit
 
 ---
 
-## Hackathon materials
+## Tests
 
-- **[CHECKPOINT.md](./CHECKPOINT.md)** — shipped / cancelled / remaining
-- **[SUBMISSION.md](./SUBMISSION.md)** — Devfolio copy, judging alignment
-- **[DEMO.md](./DEMO.md)** — 5-minute video script
-
----
-
-## vs Existing projects
-
-| | RoundVault | Arischain | TrustArisan | CROSCA |
-|--|------------|-----------|-------------|--------|
-| Chain | **Sui** | Ethereum | BSC | EVM |
-| Stake + slash | ✓ | Basic | ? | ✓ |
-| Portable reputation | ✓ | — | — | — |
-| Sui PTBs | ✓ | — | — | — |
+```bash
+npm test              # Move unit tests + testnet E2E smoke
+npm run test:e2e:write  # E2E + create_vault tx (needs funded sui CLI wallet)
+```
 
 ---
-
-## Out of scope (cancelled)
-
-Not planned for this hackathon: zkLogin, gas sponsorship, slot NFT early exit, idle yield on pooled funds. Details in [CHECKPOINT.md](./CHECKPOINT.md).
-
----
-
-## Track
-
-Sui Overflow 2026 — **DeFi & Payments**
 
 ## License
 
