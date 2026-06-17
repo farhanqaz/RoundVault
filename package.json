@@ -1,0 +1,12 @@
+{
+  "name": "roundvault",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Trustless rotating savings (ROSCA) on Sui",
+  "scripts": {
+    "test:move": "cd move/roundvault && sui move test",
+    "test:e2e": "node scripts/e2e-testnet.mjs",
+    "test:e2e:write": "node scripts/e2e-testnet.mjs --write",
+    "test": "npm run test:move && npm run test:e2e"
+  }
+}

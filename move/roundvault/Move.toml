@@ -1,0 +1,8 @@
+[package]
+name = "roundvault"
+edition = "2024"
+license = "MIT"
+authors = ["RoundVault Team"]
+
+[addresses]
+roundvault = "0x0"
