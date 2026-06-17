@@ -1,0 +1,9 @@
+{
+  "network": "testnet",
+  "packageId": "0x346ec1fa6b3c0e476c60b20e8700486e7d64084925492cd3bd06c4dbd769ce86",
+  "packagePublishedAt": "0x346ec1fa6b3c0e476c60b20e8700486e7d64084925492cd3bd06c4dbd769ce86",
+  "reputationRegistryId": "0x35d004d3e02124f7b077d9b1781218d0510cc22253b58bd6e3c3709af13d9b5e",
+  "upgradeCapability": "0x126e39a89de37c30ab60de298d2524bbef2266bbcbad3c05e2a67d8b2aa4f051",
+  "publishTxDigest": "F5LeZHurn19ajXcyPhzRszg69Kk563y3VNMWtKirEyZo",
+  "version": 1
+}

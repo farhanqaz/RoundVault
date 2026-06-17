@@ -2,76 +2,96 @@
 
 **Trustless rotating savings on Sui.**
 
-> *No custodian holds the pot. Defaults get slashed.*
-
-RoundVault brings ROSCA (Rotating Savings and Credit Association) on-chain. Members stake collateral, contribute each round, and one random member wins the pot each round — enforced by smart contract, not trust.
+RoundVault brings ROSCA (Rotating Savings and Credit Association) on-chain. Members stake collateral, contribute each round, and one random member receives the pot — enforced by smart contract, not trust.
 
 ---
 
-## Problem
+## Features
 
-Over **$1 trillion** flows through informal rotating savings clubs every year. Two failure modes:
-
-| Failure | Informal | RoundVault |
-|---------|----------|------------|
-| Custodian runs with pot | Common | Impossible — pot in shared object |
-| Member defaults after payout | Very common | Stake bond slashed on-chain |
+- **Non-custodial pot** — funds live in a shared on-chain vault object
+- **Stake bonds** — defaulters are slashed after missing a round
+- **Fair gacha** — random winner selection excludes members already paid
+- **Portable reputation** — wallet score persists across vaults
+- **Auto-activation** — vault starts when the last member joins and contributes
 
 ---
 
-## Live deployment (Sui Testnet)
+## Repository structure
 
-| Resource | Link |
-|----------|------|
-| **Package ID** | `0x346ec1fa6b3c0e476c60b20e8700486e7d64084925492cd3bd06c4dbd769ce86` (v1) |
-| **Publish tx** | [Suiscan ↗](https://suiscan.xyz/testnet/tx/F5LeZHurn19ajXcyPhzRszg69Kk563y3VNMWtKirEyZo) |
-| **ReputationRegistry** | `0x35d004d3e02124f7b077d9b1781218d0510cc22253b58bd6e3c3709af13d9b5e` |
-| **Modules** | `vault`, `reputation` |
+```
+move/roundvault/     Move smart contracts (vault + reputation)
+frontend/            Next.js app (@mysten/dapp-kit)
+deployments/         On-chain deployment manifests (public object IDs)
+scripts/             E2E tests, env sync, upgrade helpers
+```
+
+---
+
+## Testnet deployment
+
+Canonical deployment metadata lives in [`deployments/testnet.json`](deployments/testnet.json).
+
+| Field | Source |
+|-------|--------|
+| Package ID | `deployments/testnet.json` → `packageId` |
+| Published at | `deployments/testnet.json` → `packagePublishedAt` |
+| Reputation registry | `deployments/testnet.json` → `reputationRegistryId` |
+| Upgrade capability | `deployments/testnet.json` → `upgradeCapability` |
+| Publish transaction | [Suiscan](https://suiscan.xyz/testnet/tx/) + `publishTxDigest` |
+
+Package upgrade metadata for the Sui CLI is tracked separately in `move/roundvault/Published.toml`.
 
 ---
 
 ## Quick start
 
-### Contract tests
+### Prerequisites
+
+- [Sui CLI](https://docs.sui.io/guides/developer/getting-started/sui-install) (for contract work)
+- Node.js 20+
+
+### Smart contract tests
 
 ```bash
 cd move/roundvault
 sui move test
 ```
 
-### Frontend (Next.js)
+### Frontend
 
 ```bash
 cd frontend
-cp .env.example .env.local
 npm install
+cp .env.example .env.local   # template only — fill from deployments/testnet.json
 npm run dev                  # http://localhost:3000
 ```
 
-Env vars:
+From the repo root you can auto-generate `.env.local`:
 
+```bash
+npm run sync:env
 ```
-NEXT_PUBLIC_PACKAGE_ID=0x346ec1fa6b3c0e476c60b20e8700486e7d64084925492cd3bd06c4dbd769ce86
-NEXT_PUBLIC_PACKAGE_PUBLISHED_AT=0x346ec1fa6b3c0e476c60b20e8700486e7d64084925492cd3bd06c4dbd769ce86
-NEXT_PUBLIC_REPUTATION_REGISTRY_ID=0x35d004d3e02124f7b077d9b1781218d0510cc22253b58bd6e3c3709af13d9b5e
-```
+
+### Environment variables
+
+| Variable | Description |
+|----------|-------------|
+| `NEXT_PUBLIC_PACKAGE_ID` | Original package ID (events, object types) |
+| `NEXT_PUBLIC_PACKAGE_PUBLISHED_AT` | Latest published package ID (moveCall targets) |
+| `NEXT_PUBLIC_REPUTATION_REGISTRY_ID` | Shared `ReputationRegistry` object ID |
+| `NEXT_PUBLIC_SITE_URL` | Public site URL for OpenGraph metadata (optional) |
+
+**Do not commit `.env.local`.** Use `deployments/testnet.json` as the single source of truth and copy values into your local env or hosting provider.
 
 ### Deploy frontend (Vercel)
 
-Root directory: `frontend` · Env: both vars above.
+- Root directory: `frontend`
+- Set the three `NEXT_PUBLIC_*` contract variables from `deployments/testnet.json`
+- Set `NEXT_PUBLIC_SITE_URL` to your production URL
 
 ---
 
-## Architecture
-
-```
-move/roundvault/sources/
-  vault.move        On-chain ROSCA protocol
-  reputation.move   Portable score registry + rep-aware entry points
-frontend/           Next.js + @mysten/dapp-kit
-```
-
-### Contract API
+## Contract API
 
 **Vault (`vault` module)**
 
@@ -86,12 +106,13 @@ frontend/           Next.js + @mysten/dapp-kit
 | `slash_defaulter_entry` | Manual slash one member (legacy) |
 | `withdraw_stake_entry` | Reclaim stake after completion |
 
-**Reputation (`reputation` module)** — updates global score; use from frontend:
+**Reputation (`reputation` module)**
 
 | Entry function | Description |
 |----------------|-------------|
 | `join_vault_rep_entry` | Join + reputation +5 |
-| `contribute_rep_entry` | Contribute + auto gacha when all paid |
+| `join_and_contribute_rep_entry` | Join last slot with stake + first contribution |
+| `contribute_rep_entry` | Contribute for current round |
 | `settle_round_rep_entry` | Auto slash + gacha after deadline |
 | `withdraw_stake_rep_entry` | Withdraw stake + vault complete +100 |
 
@@ -101,12 +122,22 @@ frontend/           Next.js + @mysten/dapp-kit
 
 ---
 
-## Tests
+## Testing
 
 ```bash
-npm test              # Move unit tests + testnet E2E smoke
-npm run test:e2e:write  # E2E + create_vault tx (needs funded sui CLI wallet)
+npm test                 # Move unit tests + testnet E2E smoke
+npm run test:e2e:write   # E2E + create_vault tx (needs funded sui CLI wallet)
 ```
+
+---
+
+## Upgrading the package
+
+```bash
+bash scripts/upgrade-testnet.sh
+```
+
+After upgrading, update `deployments/testnet.json` if `packagePublishedAt` changes, then run `npm run sync:env`.
 
 ---
 

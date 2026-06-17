@@ -11,19 +11,15 @@ import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadTestnetDeployment } from './load-deployment.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const require = createRequire(join(__dirname, '../frontend/package.json'));
 const { SuiJsonRpcClient, getJsonRpcFullnodeUrl } = require('@mysten/sui/jsonRpc');
 const { Transaction } = require('@mysten/sui/transactions');
 
-const PACKAGE_ID =
-  process.env.NEXT_PUBLIC_PACKAGE_ID ??
-  '0x346ec1fa6b3c0e476c60b20e8700486e7d64084925492cd3bd06c4dbd769ce86';
-
-const REPUTATION_REGISTRY_ID =
-  process.env.NEXT_PUBLIC_REPUTATION_REGISTRY_ID ??
-  '0x35d004d3e02124f7b077d9b1781218d0510cc22253b58bd6e3c3709af13d9b5e';
+const { packageId: PACKAGE_ID, reputationRegistryId: REPUTATION_REGISTRY_ID } =
+  loadTestnetDeployment();
 
 const MODULE = 'vault';
 const REPUTATION_MODULE = 'reputation';

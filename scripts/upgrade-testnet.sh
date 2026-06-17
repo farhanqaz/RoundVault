@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-UPGRADE_CAP="0x126e39a89de37c30ab60de298d2524bbef2266bbcbad3c05e2a67d8b2aa4f051"
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+UPGRADE_CAP=$(node -e "console.log(JSON.parse(require('fs').readFileSync('$ROOT/deployments/testnet.json','utf8')).upgradeCapability)")
 ADDR=$(sui client active-address)
 
 echo "Wallet: $ADDR"
@@ -18,9 +19,10 @@ if [ "${BAL:-0}" -lt 200000000 ]; then
   exit 1
 fi
 
-cd "$(dirname "$0")/../move/roundvault"
+cd "$ROOT/move/roundvault"
 sui move build
 sui client upgrade --upgrade-capability "$UPGRADE_CAP" --gas-budget 200000000
 
 echo ""
-echo "Upgrade done. Restart frontend dev server to pick up join_and_contribute_rep_entry."
+echo "Upgrade done. Update deployments/testnet.json if published-at changed, then:"
+echo "  npm run sync:env"
